@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>{{ .Name }}</title>
+    <title>{{ (index .Rows 1).Value }}</title>
 
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
           integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
@@ -39,74 +39,14 @@
     <hr>
     <table class="table table-striped table-bordered">
         <tbody>
-        <tr class="table-info">
-            <td>Típus</td>
-            <td>{{ .Name }}</td>
-        </tr>
-        <tr>
-            <td>Gyártási időszak</td>
-            <td>{{ .Manufactured }}</td>
-        </tr>
-        <tr>
-            <td>Fókusztávolság</td>
-            <td>{{ .Focus }}</td>
-        </tr>
-        <tr>
-            <td>Rekesz tartomány</td>
-            <td>{{ .Aperture }}</td>
-        </tr>
-        <tr>
-            <td>Közelpont</td>
-            <td>{{ .NearPoint }}</td>
-        </tr>
-        <tr>
-            <td>Lencsetagok</td>
-            <td>{{ .LensCount }}</td>
-        </tr>
-        <tr>
-            <td>Lencse csoportok</td>
-            <td>{{ .LensGroup }}</td>
-        </tr>
-        <tr>
-            <td>Apertúra lamellák</td>
-            <td>{{ .ApertureLamells }}</td>
-        </tr>
-        <tr>
-            <td>Átlós látószög</td>
-            <td>{{ .DiagonalViewAngle }}</td>
-        </tr>
-        <tr>
-            <td>36 (horizontális) x 24 mm látószög</td>
-            <td>{{ .HorizontalViewAngle }}</td>
-        </tr>
-        <tr>
-            <td>Szűrőátmérő</td>
-            <td>{{ .FilterDiameter }}</td>
-        </tr>
-        <tr>
-            <td>Hossza</td>
-            <td>{{ .Length }}</td>
-        </tr>
-        <tr>
-            <td>Átmérője</td>
-            <td>{{ .Diameter }}</td>
-        </tr>
-        <tr>
-            <td>Tömege</td>
-            <td>{{ .Weight }}</td>
-        </tr>
-        <tr>
-            <td>Foglalat</td>
-            <td>{{ .Socket }}</td>
-        </tr>
-        <tr>
-            <td>Gyártó</td>
-            <td>{{ .Manufacturer }}</td>
-        </tr>
-        <tr>
-            <td>Gyári szám</td>
-            <td>{{ .SerialNumber }}</td>
-        </tr>
+        {{ range $i, $r := .Rows }}
+            {{ if gt $i 0 }}
+                <tr {{ if eq $i 1 }}class="table-info"{{ end }}>
+                    <td>{{ $r.Label }}</td>
+                    <td>{{ $r.Value }}</td>
+                </tr>
+            {{ end }}
+        {{ end }}
         </tbody>
     </table>
 </main>
@@ -150,7 +90,7 @@
 </footer>
 
 <script>
-    let id = {{ .Id }};
+    let id = parseInt("{{ (index .Rows 0).Value }}");
 
     document.getElementById("prev").addEventListener("click", function () {
         window.location = `${id - 1}.html`

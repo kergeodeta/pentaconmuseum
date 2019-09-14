@@ -6,65 +6,27 @@ import (
 	"github.com/360EntSecGroup-Skylar/excelize"
 	"github.com/pkg/errors"
 	"html/template"
-	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
 )
 
 const htmlPath = "./generated"
+const IdIndex = 0
+const NameIndex = 1
 
-type Item struct {
-	Id                  int    // A - Objektívek
-	Name                string // B - Típus és fejléc és kép felugró szövege a HTML-ben
-	Category            string // C - Kategória
-	Manufactured        string // D - Gyártási időszak
-	Focus               string // E - Fókusztávolság
-	Aperture            string // F - Rekesz tartomány
-	NearPoint           string // G - Közelpont
-	LensCount           string // H - Lencsetagok
-	LensGroup           string // I - Lencse csoportok
-	ApertureLamells     string // J - Apertúra lamellák
-	DiagonalViewAngle   string // K - Átlós látószög
-	HorizontalViewAngle string // L - 36 x 24 mm látószög
-	FilterDiameter      string // M - Szűrőátmérő
-	Length              string // N - Hossza
-	Diameter            string // O - Átmérője
-	Weight              string // P - Tömege
-	Socket              string // Q - Foglalat
-	Manufacturer        string // R - Gyártó
-	SerialNumber        string // S - Gyári szám
-	Comment             string // T - Megjegyzés
-	PicturePath         string // U - Szerkezeti ábra elérési útvonala
-	Position            string
-}
-
-func (i Item) generateHtml() error {
-	f, err := os.Create(fmt.Sprintf("%s/%d.html", htmlPath, i.Id))
-	if err != nil {
-		return errors.Wrapf(err, "A(z) '%d' azonosítójú sor alapján a HTML fájl generálása sikertelen!", i.Id)
-	}
-
-	if err = tpl.Execute(f, i); err != nil {
-		return errors.Wrapf(err, "A(z) '%d' azonosítójú sor alapján a HTML fájl generálása sikertelen!", i.Id)
-	}
-
-	return nil
-}
-
+var fromColumn = 'A'
+var toColumn = 'U'
 var spreadsheetPath *string
-var skipRows *int
+
 var tpl *template.Template
 
 func init() {
-	tplData, err := ioutil.ReadFile("item.gohtml")
-	if err != nil {
-		log.Fatalf("HTML sablon betöltése sikertelen! %s\n", err.Error())
-	}
+	var err error
 
-	tpl, err = template.New("museum").Parse(string(tplData))
+	tpl, err = template.ParseGlob("./templates/*.gohtml")
 	if err != nil {
-		log.Fatalf("HTML sablon betöltése sikertelen! %s\n", err.Error())
+		log.Fatalf("HTML sablonok betöltése sikertelen! %s\n", err.Error())
 	}
 
 	if _, err = os.Stat(htmlPath); os.IsNotExist(err) {
@@ -74,8 +36,16 @@ func init() {
 	}
 
 	spreadsheetPath = flag.String("in", "", "Bemeneti adatokat tartalmazó XLSX fájl elérési útvonala")
-	skipRows = flag.Int("skipRows", 1, "Megadja, hogy az első hány sort ne olvassa fel")
+	fromColParam := flag.String("fromColumn", "A", "Melyik oszloptól kezdődjön az adatok beolvasása")
+	fromColumn = []rune(*fromColParam)[0]
+	toColParam := flag.String("toColumn", "U", "Melyik oszlopig kerüljenek felolvasásra az értékek")
+	toColumn = []rune(*toColParam)[0]
+
 	flag.Parse()
+}
+
+func get(s []string, i int) string {
+	return s[i]
 }
 
 func main() {
@@ -86,82 +56,58 @@ func main() {
 
 	sheets := xlsx.GetSheetMap()
 	workingSheet := sheets[1]
-	row := *skipRows + 1
-	index := make(map[int]string)
+
+	header, err := readHeader(xlsx, workingSheet)
+	if err != nil {
+		log.Fatalf("A fejléc felolvasása sikertelen! %s\n", err.Error())
+	}
+
+	rowIndex := 2
+	contents := make(map[int]string)
 	for {
-		item := getItemFrom(xlsx, workingSheet, row)
-		if row == *skipRows+1 {
-			item.Position = "first"
+		row, err := readRow(xlsx, workingSheet, rowIndex)
+		if err != nil {
+			log.Println(err.Error())
+			continue
 		}
 
-		if isLast(xlsx, workingSheet, row+1) {
-			item.Position = "last"
+		id, err := strconv.Atoi(row[IdIndex])
+		if err != nil {
+			log.Printf("A %d. sorban megadott azonosító (%v) nem megfelelő formátumú. Csak pozitív egész számok! %s\n", rowIndex, row[IdIndex], err.Error())
+			continue
 		}
 
-		if err := item.generateHtml(); err != nil {
+		contents[id] = row[NameIndex]
+
+		var position string
+		if rowIndex == 2 {
+			position = "first"
+		}
+
+		if !hasContent(xlsx, workingSheet, rowIndex+1) {
+			position = "last"
+		}
+
+		values, err := readRow(xlsx, workingSheet, rowIndex)
+		if err != nil {
+			log.Println(err.Error())
+			continue
+		}
+
+		if err := generateHtml(header, values, position); err != nil {
 			log.Println(err.Error())
 		}
 
-		index[item.Id] = item.Name
-
-		if isLast(xlsx, workingSheet, row+1) {
+		if !hasContent(xlsx, workingSheet, rowIndex+1) {
 			break
 		}
-		row += 1
+
+		rowIndex += 1
 	}
 
-	if err := generateIndex(index); err != nil {
+	if err := generateIndex(contents); err != nil {
 		log.Printf("Tartalomjegyzék generálása sikertelen! %s\n", err.Error())
 	}
-}
-
-func getItemFrom(xlsx *excelize.File, sheet string, row int) *Item {
-	id, err := strconv.Atoi(getCellValue(xlsx, sheet, fmt.Sprintf("A%d", row)))
-	if err != nil {
-		log.Println("A %d sor értelmezése sikertelen! Helytelen ID formátum!")
-		return &Item{}
-	}
-
-	return &Item{
-		Id:                  id,
-		Name:                getCellValue(xlsx, sheet, fmt.Sprintf("B%d", row)),
-		Category:            getCellValue(xlsx, sheet, fmt.Sprintf("C%d", row)),
-		Manufactured:        getCellValue(xlsx, sheet, fmt.Sprintf("D%d", row)),
-		Focus:               getCellValue(xlsx, sheet, fmt.Sprintf("E%d", row)),
-		Aperture:            getCellValue(xlsx, sheet, fmt.Sprintf("F%d", row)),
-		NearPoint:           getCellValue(xlsx, sheet, fmt.Sprintf("G%d", row)),
-		LensCount:           getCellValue(xlsx, sheet, fmt.Sprintf("H%d", row)),
-		LensGroup:           getCellValue(xlsx, sheet, fmt.Sprintf("I%d", row)),
-		ApertureLamells:     getCellValue(xlsx, sheet, fmt.Sprintf("J%d", row)),
-		DiagonalViewAngle:   getCellValue(xlsx, sheet, fmt.Sprintf("K%d", row)),
-		HorizontalViewAngle: getCellValue(xlsx, sheet, fmt.Sprintf("L%d", row)),
-		FilterDiameter:      getCellValue(xlsx, sheet, fmt.Sprintf("M%d", row)),
-		Length:              getCellValue(xlsx, sheet, fmt.Sprintf("N%d", row)),
-		Diameter:            getCellValue(xlsx, sheet, fmt.Sprintf("O%d", row)),
-		Weight:              getCellValue(xlsx, sheet, fmt.Sprintf("P%d", row)),
-		Socket:              getCellValue(xlsx, sheet, fmt.Sprintf("Q%d", row)),
-		Manufacturer:        getCellValue(xlsx, sheet, fmt.Sprintf("R%d", row)),
-		SerialNumber:        getCellValue(xlsx, sheet, fmt.Sprintf("S%d", row)),
-		Comment:             getCellValue(xlsx, sheet, fmt.Sprintf("T%d", row)),
-		PicturePath:         getCellValue(xlsx, sheet, fmt.Sprintf("U%d", row)),
-	}
-}
-
-func isLast(xlsx *excelize.File, sheet string, row int) bool {
-	if getCellValue(xlsx, sheet, fmt.Sprintf("A%d", row)) == "" {
-		return true
-	}
-
-	return false
-}
-
-func getCellValue(xlsx *excelize.File, sheet, axis string) string {
-	val, err := xlsx.GetCellValue(sheet, axis)
-	if err != nil {
-		log.Printf("A %s cella értékének kiolvasása sikertelen! %s\n", axis, err.Error())
-	}
-
-	return val
 }
 
 func generateIndex(items map[int]string) error {
@@ -170,10 +116,84 @@ func generateIndex(items map[int]string) error {
 		return errors.Wrap(err, "A tartalomjegyzék generálása sikertelen!")
 	}
 
-	indexTpl := template.Must(template.ParseFiles("index.gohtml"))
-	if err = indexTpl.Execute(f, items); err != nil {
+	if err = tpl.ExecuteTemplate(f, "index.gohtml", items); err != nil {
 		return errors.Wrap(err, "A tartalomjegyzék generálása sikertelen!")
 	}
 
 	return nil
+}
+
+type TableRow struct {
+	Label string
+	Value string
+}
+
+func generateHtml(names, values []string, position string) error {
+	id, err := strconv.Atoi(values[IdIndex])
+	if err != nil {
+		return errors.Wrapf(err, "A '%s' azonosítójú fájl generálása sikertelen. Az azonosítónak egész számnak kell lennie!", values[IdIndex])
+	}
+
+	f, err := os.Create(fmt.Sprintf("%s/%d.html", htmlPath, id))
+	if err != nil {
+		return errors.Wrapf(err, "A(z) '%d' azonosítójú sor alapján a HTML fájl generálása sikertelen!", id)
+	}
+
+	tableRows := []TableRow{}
+	for i, v := range names {
+		tableRows = append(tableRows, TableRow{v, values[i]})
+	}
+
+	payload := struct {
+		Rows []TableRow
+		Position string
+	}{
+		tableRows,
+		position,
+	}
+	if err = tpl.ExecuteTemplate(f, "item.gohtml", payload); err != nil {
+		return errors.Wrapf(err, "A(z) '%d' azonosítójú sor alapján a HTML fájl generálása sikertelen!", id)
+	}
+
+	return nil
+}
+
+func hasContent(xlsx *excelize.File, sheet string, row int) bool {
+	if val, _ := getCellValue(xlsx, sheet, fmt.Sprintf("A%d", row)); val == "" {
+		return false
+	}
+
+	return true
+}
+
+// A táblázat első sorát felolvasó eljárás. Konvenció szerint a táblázatnak az első sorának kell tartalmaznia a
+// mezőneveket
+func readHeader(xlsx *excelize.File, sheet string) ([]string, error) {
+	return readRow(xlsx, sheet, 1)
+}
+
+// Felolvassa az adott táblázat, adott munkalapjának meghatározott sorát
+func readRow(xlsx *excelize.File, sheet string, row int) ([]string, error) {
+	var values []string
+
+	for col := fromColumn; col <= toColumn; col++ {
+		axis := fmt.Sprintf("%c%d", col, row)
+		value, err := getCellValue(xlsx, sheet, axis)
+		if err != nil {
+			return nil, errors.Wrapf(err, "A '%s' munkalap %d. sorának felolvasása sikertelen", sheet, row)
+		}
+
+		values = append(values, value)
+	}
+
+	return values, nil
+}
+
+func getCellValue(xlsx *excelize.File, sheet, axis string) (string, error) {
+	val, err := xlsx.GetCellValue(sheet, axis)
+	if err != nil {
+		return "", errors.Wrapf(err, "A '%s' munkalap '%s' cellájának felolvasása sikertelen!", sheet, axis)
+	}
+
+	return val, nil
 }
