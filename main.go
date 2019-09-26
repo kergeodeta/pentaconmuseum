@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 )
 
 const htmlPath = "./generated"
@@ -140,17 +141,31 @@ func generateHtml(names, values []string, position string) error {
 	}
 
 	tableRows := []TableRow{}
+	var imgUrl, imgAlt string
+
 	for i, v := range names {
-		tableRows = append(tableRows, TableRow{v, values[i]})
+		htmlValue := values[i]
+		if strings.HasPrefix(values[i], "pic|") {
+			img := strings.Split(htmlValue, "|")
+			imgAlt = img[1]
+			imgUrl = img[2]
+			htmlValue = "pic"
+		}
+
+		tableRows = append(tableRows, TableRow{v, htmlValue})
 	}
 
 	payload := struct {
-		Rows []TableRow
+		Rows     []TableRow
 		Position string
+		ImgUrl   string
+		ImgAlt   string
 	}{
 		tableRows,
 		position,
+		imgUrl, imgAlt,
 	}
+
 	if err = tpl.ExecuteTemplate(f, "item.gohtml", payload); err != nil {
 		return errors.Wrapf(err, "A(z) '%d' azonosítójú sor alapján a HTML fájl generálása sikertelen!", id)
 	}

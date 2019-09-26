@@ -39,11 +39,17 @@
     <hr>
     <table class="table table-striped table-bordered">
         <tbody>
+        {{ $img := .ImgUrl }}
+        {{ $alt := .ImgAlt }}
         {{ range $i, $r := .Rows }}
             {{ if gt $i 0 }}
                 <tr {{ if eq $i 1 }}class="table-info"{{ end }}>
                     <td>{{ $r.Label }}</td>
-                    <td>{{ $r.Value }}</td>
+                    {{ if ne $r.Value "pic" }}
+                        <td>{{ $r.Value }}</td>
+                    {{ else }}
+                        <td><img src="{{ $img }}" alt="{{ $alt }}"></td>
+                    {{ end }}
                 </tr>
             {{ end }}
         {{ end }}
