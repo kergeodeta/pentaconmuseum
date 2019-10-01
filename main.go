@@ -16,9 +16,10 @@ const htmlPath = "./generated"
 const IdIndex = 0
 const NameIndex = 1
 
-var fromColumn = 'A'
-var toColumn = 'U'
 var spreadsheetPath *string
+
+var fromColumn *string
+var toColumn *string
 
 var tpl *template.Template
 
@@ -37,16 +38,10 @@ func init() {
 	}
 
 	spreadsheetPath = flag.String("in", "", "Bemeneti adatokat tartalmazó XLSX fájl elérési útvonala")
-	fromColParam := flag.String("fromColumn", "A", "Melyik oszloptól kezdődjön az adatok beolvasása")
-	fromColumn = []rune(*fromColParam)[0]
-	toColParam := flag.String("toColumn", "U", "Melyik oszlopig kerüljenek felolvasásra az értékek")
-	toColumn = []rune(*toColParam)[0]
+	fromColumn = flag.String("fromColumn", "A", "Melyik oszloptól kezdődjön az adatok beolvasása")
+	toColumn = flag.String("toColumn", "V", "Melyik oszlopig kerüljenek felolvasásra az értékek")
 
 	flag.Parse()
-}
-
-func get(s []string, i int) string {
-	return s[i]
 }
 
 func main() {
@@ -140,30 +135,42 @@ func generateHtml(names, values []string, position string) error {
 		return errors.Wrapf(err, "A(z) '%d' azonosítójú sor alapján a HTML fájl generálása sikertelen!", id)
 	}
 
-	tableRows := []TableRow{}
+	var tableRows []TableRow
 	var imgUrl, imgAlt string
+	var rotateFirst, rotateReel string
 
 	for i, v := range names {
 		htmlValue := values[i]
-		if strings.HasPrefix(values[i], "pic|") {
-			img := strings.Split(htmlValue, "|")
-			imgAlt = img[1]
-			imgUrl = img[2]
+		if strings.HasPrefix(htmlValue, "pic!") {
+			cellValue := strings.Split(htmlValue, "!")
+			imgAlt = cellValue[1]
+			imgUrl = cellValue[2]
 			htmlValue = "pic"
+		}
+
+		if strings.HasPrefix(htmlValue, "rotate!") {
+			cellValue := strings.Split(htmlValue, "!")[1]
+			rotateFirst = FirstImage(cellValue)
+			rotateReel = IntervalImage(cellValue)
+
+			continue
 		}
 
 		tableRows = append(tableRows, TableRow{v, htmlValue})
 	}
 
 	payload := struct {
-		Rows     []TableRow
-		Position string
-		ImgUrl   string
-		ImgAlt   string
+		Rows        []TableRow
+		Position    string
+		ImgUrl      string
+		ImgAlt      string
+		RotateFirst string
+		RotateReel  string
 	}{
 		tableRows,
 		position,
 		imgUrl, imgAlt,
+		rotateFirst, rotateReel,
 	}
 
 	if err = tpl.ExecuteTemplate(f, "item.gohtml", payload); err != nil {
@@ -191,7 +198,9 @@ func readHeader(xlsx *excelize.File, sheet string) ([]string, error) {
 func readRow(xlsx *excelize.File, sheet string, row int) ([]string, error) {
 	var values []string
 
-	for col := fromColumn; col <= toColumn; col++ {
+	fromRune := []rune(*fromColumn)[0]
+	toRune := []rune(*toColumn)[0]
+	for col := fromRune; col <= toRune; col++ {
 		axis := fmt.Sprintf("%c%d", col, row)
 		value, err := getCellValue(xlsx, sheet, axis)
 		if err != nil {
