@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/360EntSecGroup-Skylar/excelize"
+	"github.com/kergeodeta/pentaconmuseum/templates"
 	"github.com/pkg/errors"
 	"html/template"
 	"log"
@@ -26,9 +27,14 @@ var tpl *template.Template
 func init() {
 	var err error
 
-	tpl, err = template.ParseGlob("./templates/*.gohtml")
+	tpl, err = template.New("index.gohtml").Parse(templates.IndexTemplate)
 	if err != nil {
-		log.Fatalf("HTML sablonok betöltése sikertelen! %s\n", err.Error())
+		log.Fatalf("Tartalomjegyzék sablon betöltése sikertelen! #{err.Error()}\n")
+	}
+
+	tpl, err = tpl.New("item.gohtml").Parse(templates.ItemTemplate)
+	if err != nil {
+		log.Fatalf("Elem sablonok betöltése sikertelen! %s\n", err.Error())
 	}
 
 	if _, err = os.Stat(htmlPath); os.IsNotExist(err) {

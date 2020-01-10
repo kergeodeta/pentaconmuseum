@@ -1,3 +1,6 @@
+package templates
+
+var ItemTemplate string = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -111,7 +114,7 @@
     let id = parseInt("{{ (index .Rows 0).Value }}");
 
     document.getElementById("prev").addEventListener("click", function () {
-        window.location = `${id - 1}.html`
+		window.location = id-- + ".html"
     });
 
     document.getElementById("contents").addEventListener("click", function () {
@@ -119,7 +122,7 @@
     });
 
     document.getElementById("next").addEventListener("click", function () {
-        window.location = `${id + 1}.html`
+		window.location = id++ + ".html"
     });
 </script>
 
@@ -127,3 +130,4 @@
 <script src="https://cdn.jsdelivr.net/npm/jquery.reel@1.3.1/jquery.reel.min.js"></script>
 </body>
 </html>
+`

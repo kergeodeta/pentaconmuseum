@@ -1,3 +1,6 @@
+package templates
+
+var IndexTemplate string = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -74,3 +77,4 @@
 
 </body>
 </html>
+`
